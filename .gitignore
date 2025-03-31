@@ -12,3 +12,5 @@
 !obfs-config.json
 !unobfuscated/
 !unobfuscated/**
+!assets/
+!assets/**
