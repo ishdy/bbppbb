@@ -1,12 +1,15 @@
-import { readFileSync, writeFileSync, mkdirSync } from 'fs';
+import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'fs';
 import { join, dirname as pathDirname } from 'path';
 import { fileURLToPath } from 'url';
 import { build } from 'esbuild';
 import { sync } from 'glob';
-import { minify as jsMinify } from 'terser';
-import { minify as htmlMinify } from 'html-minifier';
+import { minify } from 'html-minifier';
 import JSZip from "jszip";
 import obfs from 'javascript-obfuscator';
+import pkg from '../package.json' with { type: 'json' };
+
+const { version } = pkg;
+const { obfuscate } = obfs;
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = pathDirname(__filename);
@@ -26,18 +29,19 @@ async function processHtmlPages() {
         const styleCode = readFileSync(base('style.css'), 'utf8');
         const scriptCode = readFileSync(base('script.js'), 'utf8');
 
-        const finalScriptCode = await jsMinify(scriptCode);
         const finalHtml = indexHtml
             .replace(/__STYLE__/g, `<style>${styleCode}</style>`)
-            .replace(/__SCRIPT__/g, finalScriptCode.code);
-
-        const minifiedHtml = htmlMinify(finalHtml, {
+            .replace(/__SCRIPT__/g, scriptCode)
+            .replace(/__PANEL_VERSION__/g, version);
+/*
+        const minifiedHtml = minify(finalHtml, {
             collapseWhitespace: true,
             removeAttributeQuotes: true,
-            minifyCSS: true
-        });
+            minifyCSS: true,
+            minifyJS: true
+        });*/
 
-        result[dir] = JSON.stringify(minifiedHtml);
+        result[dir] = JSON.stringify(finalHtml);
     }
 
     console.log('✅ Assets bundled successfuly!');
@@ -55,6 +59,7 @@ async function buildWorker() {
         bundle: true,
         format: 'esm',
         write: false,
+        minifySyntax: false,
         external: ['cloudflare:sockets'],
         platform: 'node',
         define: {
@@ -62,50 +67,56 @@ async function buildWorker() {
             __LOGIN_HTML_CONTENT__: htmls['login'] ?? '""',
             __ERROR_HTML_CONTENT__: htmls['error'] ?? '""',
             __SECRETS_HTML_CONTENT__: htmls['secrets'] ?? '""',
-            __ICON__: JSON.stringify(faviconBase64)
+            __ICON__: JSON.stringify(faviconBase64),
+            __PANEL_VERSION__: JSON.stringify(version)
         }
     });
-    
+
     console.log('✅ Worker built successfuly!');
+    const finalCode = code.outputFiles[0].text.replace(/\/\*[\s\S]*?\*\//g, '');
 
-    const minifiedCode = await jsMinify(code.outputFiles[0].text, {
-        module: true,
-        output: {
-            comments: false
-        }
-    });
-
-    console.log('✅ Worker minified successfuly!');
-
-    const obfuscationResult = obfs.obfuscate(minifiedCode.code, {
-        stringArrayThreshold: 1,
-        stringArrayEncoding: [
+    /*const obfuscationResult = obfuscate(finalCode, {
+        "stringArrayThreshold": 1,
+        "stringArrayEncoding": [
             "rc4"
         ],
-        numbersToExpressions: true,
-        transformObjectKeys: true,
-        renameGlobals: true,
-        deadCodeInjection: true,
-        deadCodeInjectionThreshold: 0.2,
-        simplify: true,
-        compact: true,
-        target: "node"
-    });
+        "numbersToExpressions": true,
+        "transformObjectKeys": true,
+        "renameGlobals": true,
+        "deadCodeInjection": true,
+        "deadCodeInjectionThreshold": 0.3,
+        "simplify": true,
+        "compact": true,
+        "target": "node"
+    });*/
 
-    const worker = obfuscationResult.getObfuscatedCode();
-    console.log('✅ Worker obfuscated successfuly!');
-
+    //const worker = obfuscationResult.getObfuscatedCode();
     mkdirSync(DIST_PATH, { recursive: true });
-    writeFileSync('./dist/worker.js', worker, 'utf8');
+    writeFileSync('./dist/worker.js', finalCode, 'utf8');
 
-    const zip = new JSZip();
+/*const dirPath = join(__dirname, '../my');
+const filePath = join(dirPath, 'worker.js');
+
+// Create the directory if it doesn't exist
+if (!existsSync(dirPath)) {
+  mkdirSync(dirPath, { recursive: true });
+  console.log(`Directory created: ${dirPath}`);
+}
+
+// Create and write to the file
+
+writeFileSync(filePath, finalCode, 'utf8');
+console.log(`File created: ${filePath}`);
+
+    */
+    /*const zip = new JSZip();
     zip.file('_worker.js', worker);
     zip.generateAsync({
         type: 'nodebuffer',
         compression: 'DEFLATE'
-    }).then(nodebuffer => writeFileSync('./dist/worker.zip', nodebuffer));
+    }).then(nodebuffer => writeFileSync('./dist/worker.zip', nodebuffer));*/
 
-    console.log('✅ Worker files published successfuly!');
+    console.log('✅ Worker obfuscated successfuly!');
 }
 
 buildWorker().catch(err => {
