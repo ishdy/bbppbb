@@ -1,5 +1,5 @@
-name: Build and Release
-
+name: ReBuild and Release
+      
 permissions:
   contents: write
 
@@ -30,18 +30,21 @@ jobs:
         run: npm install
 
       - name: Build project
-        run: npm run build
-
-      - name: Read release note
-        id: read_release
-        shell: bash
         run: |
-          r=$(cat RELEASE.md)         
-          r="${r//'%'/'%25'}"                               
-          r="${r//$'\n'/'%0A'}"                             
-          r="${r//$'\r'/'%0D'}"                             
-          echo "RELEASE_BODY=$r" >> $GITHUB_OUTPUT          
+            npm run build
+            mkdir -p unobfuscated
+            cp -f dist/worker.js unobfuscated/worker.js
 
+      - name: Commit and push built worker
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git add -f unobfuscated/worker.js
+          git commit -m "Just build: worker.js"
+          git push
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        
       - name: Upload Release Assets
         uses: svenstaro/upload-release-action@v2
         with:
@@ -52,4 +55,3 @@ jobs:
           overwrite: true
           file_glob: true
           prerelease: true
-          body: ${{ steps.read_release.outputs.RELEASE_BODY }}
