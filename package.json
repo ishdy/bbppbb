@@ -15,9 +15,9 @@
 		"javascript-obfuscator": "latest"
 	},
 	"dependencies": {
-		"js-sha256": "^0.11.0",
 		"jose": "^6.0.10",
 		"jszip": "^3.10.1",
-		"tweetnacl": "^1.0.3"
+		"tweetnacl": "^1.0.3",
+		"js-sha256": "^0.11.0"
 	}
 }
