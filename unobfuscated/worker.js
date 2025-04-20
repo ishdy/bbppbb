@@ -17172,7 +17172,7 @@ summary h3 {
 
 <body>
     <h1>
-        BPB Panel <span id="panel-version" style="font-size: smaller;">v3.2.2</span> <img class="icon"
+        BPB Panel <span id="panel-version" style="font-size: smaller;">v3.2.3</span> <img class="icon"
             src="/favicon.ico" alt="BPB Logo">
     </h1>
     <div class="form-container container">
@@ -19076,7 +19076,7 @@ button {
 <body>
     <div class="container">
         <h1>
-            BPB Panel <span id="panel-version" style="font-size: smaller;">v3.2.2</span> <img class="icon"
+            BPB Panel <span id="panel-version" style="font-size: smaller;">v3.2.3</span> <img class="icon"
                 src="/favicon.ico" alt="BPB Logo">
         </h1>
         <div class="form-container">
@@ -19317,7 +19317,7 @@ button {
 <body>
     <div class="container">
         <h1>
-            BPB Panel <span id="panel-version" style="font-size: smaller;">v3.2.2</span> <img class="icon"
+            BPB Panel <span id="panel-version" style="font-size: smaller;">v3.2.3</span> <img class="icon"
                 src="/favicon.ico" alt="BPB Logo">
         </h1>
         <div class="form-container">
@@ -19471,7 +19471,7 @@ h1 {
     <div id="error-container">
         <h1>
             BPB Panel
-            <span id="panel-version" style="font-size: smaller">v3.2.2</span>
+            <span id="panel-version" style="font-size: smaller">v3.2.3</span>
             <img class="icon" src="/favicon.ico" alt="BPB Logo" />
         </h1>
         <div id="error-message">
@@ -19549,7 +19549,7 @@ async function respond(success, status, message2, body, customHeaders) {
 // package.json
 var package_default = {
   name: "bpb-panel",
-  version: "3.2.2",
+  version: "3.2.3",
   homepage: "https://github.com/bia-pain-bache/BPB-Worker-Panel",
   license: "GPL-3.0",
   private: true,
