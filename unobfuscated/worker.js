@@ -46,7 +46,7 @@ var require_nacl_fast = __commonJS({
       var _0 = new Uint8Array(16);
       var _9 = new Uint8Array(32);
       _9[0] = 9;
-      var gf0 = gf(), gf1 = gf([1]), _121665 = gf([56129, 1]), D = gf([30883, 4953, 19914, 30187, 55467, 16705, 2637, 112, 59544, 30585, 16505, 36039, 65139, 11119, 27886, 20995]), D2 = gf([61785, 9906, 39828, 60374, 45398, 33411, 5274, 224, 53552, 61171, 33010, 6542, 64743, 22239, 55772, 9222]), X = gf([54554, 36645, 11616, 51542, 42930, 38181, 51040, 26924, 56412, 64982, 57905, 49316, 21502, 52590, 14035, 8553]), Y = gf([26200, 26214, 26214, 26214, 26214, 26214, 26214, 26214, 26214, 26214, 26214, 26214, 26214, 26214, 26214, 26214]), I = gf([41136, 18958, 6951, 50414, 58488, 44335, 6150, 12099, 55207, 15867, 153, 11085, 57099, 20417, 9344, 11139]);
+      var gf0 = gf(), gf1 = gf([1]), _121665 = gf([56129, 1]), D = gf([30883, 4953, 19914, 30187, 55467, 16705, 2637, 112, 59544, 30585, 16505, 36039, 65139, 11119, 27886, 20995]), D2 = gf([61785, 9906, 39828, 60374, 45398, 33411, 5274, 224, 53552, 61171, 33010, 6542, 64743, 22239, 55772, 9222]), X = gf([54554, 36645, 11616, 51542, 42930, 38181, 51040, 26924, 56412, 64982, 57905, 49316, 21502, 52590, 14035, 8553]), Y = gf([26200, 26214, 26214, 26214, 26214, 26214, 26214, 26214, 26214, 26214, 26214, 26214, 26214， 26214, 26214, 26214]), I = gf([41136, 18958, 6951, 50414, 58488, 44335, 6150, 12099, 55207, 15867, 153, 11085, 57099, 20417, 9344, 11139]);
       function ts64(x, i, h, l) {
         x[i] = h >> 24 & 255;
         x[i + 1] = h >> 16 & 255;
@@ -19136,7 +19136,7 @@ document.getElementById("togglePassword").addEventListener("click", function () 
 });</script>
 </body>
 
-</html>`.replace(/__PANEL_VERSION__/g, globalThis.panelVersion);
+</html>`。replace(/__PANEL_VERSION__/g, globalThis.panelVersion);
   return new Response(html, {
     headers: { "Content-Type": "text/html" }
   });
@@ -19550,7 +19550,7 @@ async function respond(success, status, message2, body, customHeaders) {
 var package_default = {
   name: "bpb-panel",
   version: "3.2.3",
-  homepage: atob("aHR0cHM6Ly9naXRodWIuY29tL2JpYS1wYWluLWJhY2hlL0JQQi1Xb3JrZXItUGFuZWw="),
+  homepage: atob("aHR0cHM6Ly9naXRodWIuY29tL2JpYS1wYWluLWJhY2hlL0JQQi1Xb3JrZXItUGFuZWw="),// 此处自动生成有误，现为手动修改。
   license: "GPL-3.0",
   private: true,
   type: "module",
