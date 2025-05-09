@@ -59,8 +59,6 @@ async function buildWorker() {
         }
     });
 
-    let code = result.outputFiles[0].text;
-
     // 清理 BOM 和特殊字符（避免部署乱码）
     code = code
         .replace(/，/g, ',')
