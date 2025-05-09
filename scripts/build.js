@@ -3,16 +3,14 @@ import { join, dirname as pathDirname } from 'path';
 import { fileURLToPath } from 'url';
 import { build } from 'esbuild';
 import { sync } from 'glob';
-import { minify as jsMinify } from 'terser';
-import { minify as htmlMinify } from 'html-minifier';
-import JSZip from "jszip";
-import obfs from 'javascript-obfuscator';
+import pkg from '../package.json' with { type: 'json' };
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = pathDirname(__filename);
 
+// 当前工作目录（main 或 dev）
 const ASSET_PATH = join(__dirname, '../src/assets');
-const DIST_PATH = join(__dirname, '../dist/');
+const DIST_PATH = join(__dirname, '../dist/'); // 修改为 dist 目录
 
 async function processHtmlPages() {
     const indexFiles = sync('**/index.html', { cwd: ASSET_PATH });
@@ -21,31 +19,24 @@ async function processHtmlPages() {
     for (const relativeIndexPath of indexFiles) {
         const dir = pathDirname(relativeIndexPath);
         const base = (file) => join(ASSET_PATH, dir, file);
-
+ 
         const indexHtml = readFileSync(base('index.html'), 'utf8');
         const styleCode = readFileSync(base('style.css'), 'utf8');
         const scriptCode = readFileSync(base('script.js'), 'utf8');
 
-        const finalScriptCode = await jsMinify(scriptCode);
         const finalHtml = indexHtml
             .replace(/__STYLE__/g, `<style>${styleCode}</style>`)
-            .replace(/__SCRIPT__/g, finalScriptCode.code);
+            .replace(/__SCRIPT__/g, scriptCode)
+            .replace(/__PANEL_VERSION__/g, version);
 
-        const minifiedHtml = htmlMinify(finalHtml, {
-            collapseWhitespace: true,
-            removeAttributeQuotes: true,
-            minifyCSS: true
-        });
-
-        result[dir] = JSON.stringify(minifiedHtml);
+        result[dir] = JSON.stringify(finalHtml);
     }
 
-    console.log('✅ Assets bundled successfuly!');
+    console.log('✅ Assets bundled');
     return result;
 }
 
 async function buildWorker() {
-
     const htmls = await processHtmlPages();
     const faviconBuffer = readFileSync('./src/assets/favicon.ico');
     const faviconBase64 = faviconBuffer.toString('base64');
@@ -63,50 +54,33 @@ async function buildWorker() {
             __LOGIN_HTML_CONTENT__: htmls['login'] ?? '""',
             __ERROR_HTML_CONTENT__: htmls['error'] ?? '""',
             __SECRETS_HTML_CONTENT__: htmls['secrets'] ?? '""',
-            __ICON__: JSON.stringify(faviconBase64)
-        }
-    });
-    
-    console.log('✅ Worker built successfuly!');
-
-    const minifiedCode = await jsMinify(code.outputFiles[0].text, {
-        module: true,
-        output: {
-            comments: false
+            __ICON__: JSON.stringify(faviconBase64),
+            __PANEL_VERSION__: JSON.stringify(version)
         }
     });
 
-    console.log('✅ Worker minified successfuly!');
+    let code = result.outputFiles[0].text;
 
-    const obfuscationResult = obfs.obfuscate(minifiedCode.code, {
-        stringArrayThreshold: 1,
-        stringArrayEncoding: [
-            "rc4"
-        ],
-        numbersToExpressions: true,
-        transformObjectKeys: true,
-        renameGlobals: true,
-        deadCodeInjection: true,
-        deadCodeInjectionThreshold: 0.2,
-        target: "browser"
-    });
+    // 清理 BOM 和特殊字符（避免部署乱码）
+    code = code
+        .replace(/，/g, ',')
+        .replace(/；/g, ';')
+        .replace(/（/g, '(')
+        .replace(/）/g, ')')
+        .replace(/【/g, '[')
+        .replace(/】/g, ']')
+        .replace(/：/g, ':')
+        .replace(/。/g, '.')
+        .replace(/“/g, '"')
+        .replace(/”/g, '"')
+        .replace(/‘/g, "'")
+        .replace(/’/g, "'");
 
-    const finalCode = obfuscationResult.getObfuscatedCode();
-    const worker = `// @ts-nocheck\n${finalCode}`;
-    
-    console.log('✅ Worker obfuscated successfuly!');
+    mkdirSync(OUTPUT_PATH, { recursive: true });
+    const outputFile = join(OUTPUT_PATH, 'worker.js'); // 输出到 dist 目录
+    writeFileSync(outputFile, code, 'utf8');
 
-    mkdirSync(DIST_PATH, { recursive: true });
-    writeFileSync('./dist/worker.js', worker, 'utf8');
-
-    const zip = new JSZip();
-    zip.file('_worker.js', worker);
-    zip.generateAsync({
-        type: 'nodebuffer',
-        compression: 'DEFLATE'
-    }).then(nodebuffer => writeFileSync('./dist/worker.zip', nodebuffer));
-
-    console.log('✅ Done!');
+    console.log(`✅ Wrote: ${outputFile}`);
 }
 
 buildWorker().catch(err => {
