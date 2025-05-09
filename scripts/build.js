@@ -7,6 +7,7 @@ import pkg from '../package.json' with { type: 'json' };
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = pathDirname(__filename);
+const version = pkg.version; // 关键修复：从 package.json 获取版本号
 
 // 当前工作目录（main 或 dev）
 const ASSET_PATH = join(__dirname, '../src/assets');
