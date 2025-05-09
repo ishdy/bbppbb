@@ -70,6 +70,13 @@ async function buildWorker() {
 
     let code = result.outputFiles[0].text;
     code = code
+        code = code
+        .replace(/[\u200B-\u200D\uFEFF]/g, '')  // 零宽字符
+        .replace(/^\uFEFF/, '')                 // BOM
+        .replace(/，/g, ',')
+        .replace(/；/g, ';')
+        .replace(/“|”/g, '"')
+        .replace(/‘|’/g, "'")
         .replace(/，/g, ',')
         .replace(/；/g, ';')
         .replace(/（/g, '(')
