@@ -13,36 +13,13 @@ const version = pkg.version; // 关键修复：从 package.json 获取版本号
 const ASSET_PATH = join(__dirname, '../src/assets');
 const DIST_PATH = join(__dirname, '../dist/'); // 修改为 dist 目录
 
-async function processHtmlPages() {
-    const indexFiles = sync('**/index.html', { cwd: ASSET_PATH });
-    const result = {};
-
-    for (const relativeIndexPath of indexFiles) {
-        const dir = pathDirname(relativeIndexPath);
-        const base = (file) => join(ASSET_PATH, dir, file);
- 
-        const indexHtml = readFileSync(base('index.html'), 'utf8');
-        const styleCode = readFileSync(base('style.css'), 'utf8');
-        const scriptCode = readFileSync(base('script.js'), 'utf8');
-
-const finalHtml = indexHtml
-  .replace(/__STYLE__/g, `<style>${styleCode}</style>`)
-  .replace(/__SCRIPT__/g, scriptCode)
-  .replace(/__PANEL_VERSION__/g, version); // ✅ 现在 version 已定义
-
-        result[dir] = JSON.stringify(finalHtml);
-    }
-
-    console.log('✅ Assets bundled');
-    return result;
-}
-
 async function buildWorker() {
     const htmls = await processHtmlPages();
     const faviconBuffer = readFileSync('./src/assets/favicon.ico');
     const faviconBase64 = faviconBuffer.toString('base64');
 
-    const code = await build({
+    // 修改这里：获取构建结果的代码
+    const result = await build({
         entryPoints: [join(__dirname, '../src/worker.js')],
         bundle: true,
         format: 'esm',
@@ -60,7 +37,10 @@ async function buildWorker() {
         }
     });
 
-    // 清理 BOM 和特殊字符（避免部署乱码）
+    // 关键修改：获取输出代码
+    let code = result.outputFiles[0].text;
+
+    // 清理特殊字符
     code = code
         .replace(/，/g, ',')
         .replace(/；/g, ';')
@@ -75,14 +55,13 @@ async function buildWorker() {
         .replace(/‘/g, "'")
         .replace(/’/g, "'");
 
-    mkdirSync(OUTPUT_PATH, { recursive: true });
-    const outputFile = join(OUTPUT_PATH, 'worker.js'); // 输出到 dist 目录
+    mkdirSync(DIST_PATH, { recursive: true });
+    const outputFile = join(DIST_PATH, 'worker.js');
     writeFileSync(outputFile, code, 'utf8');
 
     console.log(`✅ Wrote: ${outputFile}`);
-}
-
-buildWorker().catch(err => {
+}buildWorker().catch(err => {
     console.error('❌ Build failed:', err);
     process.exit(1);
 });
+
