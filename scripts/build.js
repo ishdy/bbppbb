@@ -24,10 +24,10 @@ async function processHtmlPages() {
         const styleCode = readFileSync(base('style.css'), 'utf8');
         const scriptCode = readFileSync(base('script.js'), 'utf8');
 
-        const finalHtml = indexHtml
-            .replace(/__STYLE__/g, `<style>${styleCode}</style>`)
-            .replace(/__SCRIPT__/g, scriptCode)
-            .replace(/__PANEL_VERSION__/g, version);
+const finalHtml = indexHtml
+  .replace(/__STYLE__/g, `<style>${styleCode}</style>`)
+  .replace(/__SCRIPT__/g, scriptCode)
+  .replace(/__PANEL_VERSION__/g, version); // ✅ 现在 version 已定义
 
         result[dir] = JSON.stringify(finalHtml);
     }
