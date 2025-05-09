@@ -46,7 +46,6 @@ async function processHtmlPages() {
 }
 
 async function buildWorker() {
-
     const htmls = await processHtmlPages();
     const faviconBuffer = readFileSync('./src/assets/favicon.ico');
     const faviconBase64 = faviconBuffer.toString('base64');
@@ -70,35 +69,35 @@ async function buildWorker() {
 
     console.log('✅ Worker built successfuly!');
 
-    const minifiedCode = await jsMinify(code.outputFiles[0].text, {
-        module: true,
-        output: {
-            comments: false
-        }
-    });
-
-    console.log('✅ Worker minified successfuly!');
+    // 移除代码压缩步骤
+    // const minifiedCode = await jsMinify(code.outputFiles[0].text, {
+    //     module: true,
+    //     output: {
+    //         comments: false
+    //     }
+    // });
+    // console.log('✅ Worker minified successfuly!');
 
     // 移除了 obfuscationResult 的相关代码
     // const obfuscationResult = obfs.obfuscate(minifiedCode.code, {
-    //  stringArrayThreshold: 1,
-    //  stringArrayEncoding: [
-    //  "rc4"
-    //  ],
-    //  numbersToExpressions: true,
-    //  transformObjectKeys: true,
-    //  renameGlobals: true,
-    //  deadCodeInjection: true,
-    //  deadCodeInjectionThreshold: 0.2,
-    //  target: "browser"
+    //     stringArrayThreshold: 1,
+    //     stringArrayEncoding: [
+    //     "rc4"
+    //     ],
+    //     numbersToExpressions: true,
+    //     transformObjectKeys: true,
+    //     renameGlobals: true,
+    //     deadCodeInjection: true,
+    //     deadCodeInjectionThreshold: 0.2,
+    //     target: "browser"
     // });
+    // console.log('✅ Worker obfuscated successfuly!');
 
-    // 直接使用 minifiedCode.code 作为 finalCode
-    const finalCode = minifiedCode.code;
+    // 直接使用 esbuild 的输出作为 finalCode
+    const finalCode = code.outputFiles[0].text;
     const worker = `// @ts-nocheck\n${finalCode}`;
 
-    // console.log('✅ Worker obfuscated successfuly!'); // 这行日志也一并移除，因为没有混淆步骤了
-    console.log('✅ Worker prepared successfuly!'); // 可以将日志修改为更合适的内容
+    console.log('✅ Worker prepared successfuly!');
 
     mkdirSync(DIST_PATH, { recursive: true });
     writeFileSync('./dist/worker.js', worker, 'utf8');
