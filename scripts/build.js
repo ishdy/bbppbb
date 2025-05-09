@@ -1,3 +1,4 @@
+// build.js - 不混淆，支持中文，UTF-8 安全构建
 import { readFileSync, writeFileSync, mkdirSync } from 'fs';
 import { join, dirname as pathDirname } from 'path';
 import { fileURLToPath } from 'url';
@@ -5,111 +6,90 @@ import { build } from 'esbuild';
 import { sync } from 'glob';
 import { minify as jsMinify } from 'terser';
 import { minify as htmlMinify } from 'html-minifier';
-import JSZip from "jszip";
-import obfs from 'javascript-obfuscator';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = pathDirname(__filename);
 
-const ASSET_PATH = join(__dirname, '../src/assets');
-const DIST_PATH = join(__dirname, '../dist/');
+const ROOT_DIR = join(__dirname, '..');
+const ASSET_PATH = join(ROOT_DIR, 'src/assets');
+const DIST_PATH = join(ROOT_DIR, 'dist');
 
 async function processHtmlPages() {
-    const indexFiles = sync('**/index.html', { cwd: ASSET_PATH });
-    const result = {};
+  const indexFiles = sync('**/index.html', { cwd: ASSET_PATH });
+  const result = {};
 
-    for (const relativeIndexPath of indexFiles) {
-        const dir = pathDirname(relativeIndexPath);
-        const base = (file) => join(ASSET_PATH, dir, file);
+  for (const relativeIndexPath of indexFiles) {
+    const dir = pathDirname(relativeIndexPath);
+    const base = (file) => join(ASSET_PATH, dir, file);
 
-        const indexHtml = readFileSync(base('index.html'), 'utf8');
-        const styleCode = readFileSync(base('style.css'), 'utf8');
-        const scriptCode = readFileSync(base('script.js'), 'utf8');
+    const indexHtml = readFileSync(base('index.html'), 'utf8');
+    const styleCode = readFileSync(base('style.css'), 'utf8');
+    const scriptCode = readFileSync(base('script.js'), 'utf8');
 
-        const finalScriptCode = await jsMinify(scriptCode);
-        const finalHtml = indexHtml
-            .replace(/__STYLE__/g, `<style>${styleCode}</style>`)
-            .replace(/__SCRIPT__/g, finalScriptCode.code);
+    const finalScriptCode = await jsMinify(scriptCode);
+    const finalHtml = indexHtml
+      .replace(/__STYLE__/g, `<style>${styleCode}</style>`)
+      .replace(/__SCRIPT__/g, finalScriptCode.code);
 
-        const minifiedHtml = htmlMinify(finalHtml, {
-            collapseWhitespace: true,
-            removeAttributeQuotes: true,
-            minifyCSS: true
-        });
+    const minifiedHtml = htmlMinify(finalHtml, {
+      collapseWhitespace: true,
+      removeAttributeQuotes: true,
+      minifyCSS: true
+    });
 
-        result[dir] = JSON.stringify(minifiedHtml);
-    }
+    // 使用反引号保留中文，防止 JSON 转义
+    result[dir] = '`' + minifiedHtml.replace(/`/g, '\\`') + '`';
+  }
 
-    console.log('✅ Assets bundled successfuly!');
-    return result;
+  console.log('✅ HTML 页面打包完成');
+  return result;
 }
 
 async function buildWorker() {
+  const htmls = await processHtmlPages();
+  const faviconBuffer = readFileSync(join(ROOT_DIR, 'src/assets/favicon.ico'));
+  const faviconBase64 = faviconBuffer.toString('base64');
 
-    const htmls = await processHtmlPages();
-    const faviconBuffer = readFileSync('./src/assets/favicon.ico');
-    const faviconBase64 = faviconBuffer.toString('base64');
+  const code = await build({
+    entryPoints: [join(ROOT_DIR, 'src/worker.js')],
+    bundle: true,
+    format: 'esm',
+    write: false,
+    minifySyntax: false,
+    external: ['cloudflare:sockets'],
+    platform: 'browser',
+    define: {
+      __PANEL_HTML_CONTENT__: htmls['panel'] ?? '""',
+      __LOGIN_HTML_CONTENT__: htmls['login'] ?? '""',
+      __ERROR_HTML_CONTENT__: htmls['error'] ?? '""',
+      __SECRETS_HTML_CONTENT__: htmls['secrets'] ?? '""',
+      __ICON__: JSON.stringify(faviconBase64)
+    }
+  });
 
-    const code = await build({
-        entryPoints: [join(__dirname, '../src/worker.js')],
-        bundle: true,
-        format: 'esm',
-        write: false,
-        external: ['cloudflare:sockets'],
-        platform: 'browser',
-        target: 'es2020',
-        define: {
-            __PANEL_HTML_CONTENT__: htmls['panel'] ?? '""',
-            __LOGIN_HTML_CONTENT__: htmls['login'] ?? '""',
-            __ERROR_HTML_CONTENT__: htmls['error'] ?? '""',
-            __SECRETS_HTML_CONTENT__: htmls['secrets'] ?? '""',
-            __ICON__: JSON.stringify(faviconBase64)
-        }
-    });
-    
-    console.log('✅ Worker built successfuly!');
+  let finalCode = code.outputFiles[0].text;
 
-    const minifiedCode = await jsMinify(code.outputFiles[0].text, {
-        module: true,
-        output: {
-            comments: false
-        }
-    });
+  // 清理 BOM 和不可见字符
+  finalCode = finalCode
+    .replace(/^\uFEFF/, '')
+    .replace(/[\u200B-\u200D]/g, '')
+    .replace(/，/g, ',')
+    .replace(/；/g, ';')
+    .replace(/（/g, '(')
+    .replace(/）/g, ')')
+    .replace(/【/g, '[')
+    .replace(/】/g, ']')
+    .replace(/：/g, ':')
+    .replace(/。/g, '.')
+    .replace(/[“”]/g, '"')
+    .replace(/[‘’]/g, "'");
 
-    console.log('✅ Worker minified successfuly!');
-
-    const obfuscationResult = obfs.obfuscate(minifiedCode.code, {
-        stringArrayThreshold: 1,
-        stringArrayEncoding: [
-            "rc4"
-        ],
-        numbersToExpressions: true,
-        transformObjectKeys: true,
-        renameGlobals: true,
-        deadCodeInjection: true,
-        deadCodeInjectionThreshold: 0.2,
-        target: "browser"
-    });
-
-    const finalCode = obfuscationResult.getObfuscatedCode();
-    const worker = `// @ts-nocheck\n${finalCode}`;
-    
-    console.log('✅ Worker obfuscated successfuly!');
-
-    mkdirSync(DIST_PATH, { recursive: true });
-    writeFileSync('./dist/worker.js', worker, 'utf8');
-
-    const zip = new JSZip();
-    zip.file('_worker.js', worker);
-    zip.generateAsync({
-        type: 'nodebuffer',
-        compression: 'DEFLATE'
-    }).then(nodebuffer => writeFileSync('./dist/worker.zip', nodebuffer));
-
-    console.log('✅ Done!');
+  mkdirSync(DIST_PATH, { recursive: true });
+  writeFileSync(join(DIST_PATH, 'worker.js'), finalCode, 'utf8');
+  console.log('✅ worker.js 已写入 dist 目录');
 }
 
 buildWorker().catch(err => {
-    console.error('❌ Build failed:', err);
-    process.exit(1);
+  console.error('❌ 构建失败:', err);
+  process.exit(1);
 });
