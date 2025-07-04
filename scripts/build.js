@@ -2,14 +2,12 @@ import { readFileSync, writeFileSync, mkdirSync } from 'fs';
 import { join, dirname as pathDirname } from 'path';
 import { fileURLToPath } from 'url';
 import { build } from 'esbuild';
-import { globSync } from 'glob';
+import { sync } from 'glob';
 import { minify as jsMinify } from 'terser';
 import { minify as htmlMinify } from 'html-minifier';
 import JSZip from "jszip";
-import obfs from 'javascript-obfuscator';
-
-const env = process.env.NODE_ENV || 'production';
-const devMode = env !== 'production';
+// 移除了 'javascript-obfuscator' 的导入
+// import obfs from 'javascript-obfuscator';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = pathDirname(__filename);
@@ -18,7 +16,7 @@ const ASSET_PATH = join(__dirname, '../src/assets');
 const DIST_PATH = join(__dirname, '../dist/');
 
 async function processHtmlPages() {
-    const indexFiles = globSync('**/index.html', { cwd: ASSET_PATH });
+    const indexFiles = sync('**/index.html', { cwd: ASSET_PATH });
     const result = {};
 
     for (const relativeIndexPath of indexFiles) {
@@ -48,7 +46,6 @@ async function processHtmlPages() {
 }
 
 async function buildWorker() {
-
     const htmls = await processHtmlPages();
     const faviconBuffer = readFileSync('./src/assets/favicon.ico');
     const faviconBase64 = faviconBuffer.toString('base64');
@@ -69,40 +66,39 @@ async function buildWorker() {
             __ICON__: JSON.stringify(faviconBase64)
         }
     });
-    
+
     console.log('✅ Worker built successfuly!');
 
-    let finalCode;
-    if (devMode) {
-        finalCode = code.outputFiles[0].text;
-    } else {
-        const minifiedCode = await jsMinify(code.outputFiles[0].text, {
-            module: true,
-            output: {
-                comments: false
-            }
-        });
-    
-        console.log('✅ Worker minified successfuly!');
-    
-        const obfuscationResult = obfs.obfuscate(minifiedCode.code, {
-            stringArrayThreshold: 1,
-            stringArrayEncoding: [
-                "rc4"
-            ],
-            numbersToExpressions: true,
-            transformObjectKeys: true,
-            renameGlobals: true,
-            deadCodeInjection: true,
-            deadCodeInjectionThreshold: 0.2,
-            target: "browser"
-        });
-    
-        console.log('✅ Worker obfuscated successfuly!');
-        finalCode = obfuscationResult.getObfuscatedCode();
-    }
+    // 移除代码压缩步骤
+    // const minifiedCode = await jsMinify(code.outputFiles[0].text, {
+    //     module: true,
+    //     output: {
+    //         comments: false
+    //     }
+    // });
+    // console.log('✅ Worker minified successfuly!');
 
+    // 移除了 obfuscationResult 的相关代码
+    // const obfuscationResult = obfs.obfuscate(minifiedCode.code, {
+    //     stringArrayThreshold: 1,
+    //     stringArrayEncoding: [
+    //     "rc4"
+    //     ],
+    //     numbersToExpressions: true,
+    //     transformObjectKeys: true,
+    //     renameGlobals: true,
+    //     deadCodeInjection: true,
+    //     deadCodeInjectionThreshold: 0.2,
+    //     target: "browser"
+    // });
+    // console.log('✅ Worker obfuscated successfuly!');
+
+    // 直接使用 esbuild 的输出作为 finalCode
+    const finalCode = code.outputFiles[0].text;
     const worker = `// @ts-nocheck\n${finalCode}`;
+
+    console.log('✅ Worker prepared successfuly!');
+
     mkdirSync(DIST_PATH, { recursive: true });
     writeFileSync('./dist/worker.js', worker, 'utf8');
 
