@@ -1,101 +1,106 @@
-import { readFileSync, writeFileSync, mkdirSync } from 'fs';
-import { join, dirname as pathDirname } from 'path';
-import { fileURLToPath } from 'url';
-import { build } from 'esbuild';
-import { globSync } from 'glob';
-import { minify as jsMinify } from 'terser';
-import { minify as htmlMinify } from 'html-minifier';
-import { execSync } from 'child_process';
-import JSZip from "jszip";
-import obfs from 'javascript-obfuscator';
-import pkg from '../package.json' with { type: 'json' };
+// 导入所需的核心模块
+import { readFileSync, writeFileSync, mkdirSync } from 'fs'; // 文件系统操作
+import { join, dirname as pathDirname } from 'path'; // 路径处理
+import { fileURLToPath } from 'url'; // URL与路径转换
+import { build } from 'esbuild'; // 高效的JavaScript打包器
+import { globSync } from 'glob'; // 文件路径匹配工具
+import { minify as jsMinify } from 'terser'; // JavaScript代码压缩工具
+import { minify as htmlMinify } from 'html-minifier'; // HTML代码压缩工具
+import { execSync } from 'child_process'; // 用于执行同步的子进程命令（如此处的git命令）
+import JSZip from "jszip"; // 用于创建ZIP压缩包
+import pkg from '../package.json' with { type: 'json' }; // 导入package.json以获取版本号
 
-const env = process.env.NODE_ENV || 'obfuscate';
-const mangleMode = env !== 'obfuscate';
+// --- 配置常量 ---
+const __filename = fileURLToPath(import.meta.url); // 获取当前文件的绝对路径
+const __dirname = pathDirname(__filename); // 获取当前文件所在的目录路径
+const ASSET_PATH = join(__dirname, '../src/assets'); // 定义资源文件（HTML, CSS, JS）的根目录
+const DIST_PATH = join(__dirname, '../dist/'); // 定义最终输出文件的目录
+const version = pkg.version; // 从package.json中获取当前版本号
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = pathDirname(__filename);
+// --- 用于美化控制台输出的辅助变量 ---
+const green = '\x1b[32m'; // 绿色文本
+const red = '\x1b[31m';   // 红色文本
+const reset = '\x1b[0m';  // 重置文本颜色
+const success = `${green}✔${reset}`; // 成功标记
+const failure = `${red}✖${reset}`;   // 失败标记
 
-const ASSET_PATH = join(__dirname, '../src/assets');
-const DIST_PATH = join(__dirname, '../dist/');
-
-const green = '\x1b[32m';
-const red = '\x1b[31m';
-const reset = '\x1b[0m';
-
-const success = `${green}✔${reset}`;
-const failure = `${red}✔${reset}`;
-
-const version = pkg.version;
-
+/**
+ * 处理所有HTML页面：查找、内联CSS和JS、压缩，并返回一个Base64编码的HTML页面映射。
+ * @returns {Promise<Object>} 一个对象，键是目录名，值是JSON字符串化的Base64编码HTML。
+ */
 async function processHtmlPages() {
+    console.log('正在捆绑和压缩HTML资源...');
+    // 同步查找所有子目录中的index.html文件
     const indexFiles = globSync('**/index.html', { cwd: ASSET_PATH });
-    const result = {};
+    const result = {}; // 用于存储处理结果
 
     for (const relativeIndexPath of indexFiles) {
-        const dir = pathDirname(relativeIndexPath);
-        const base = (file) => join(ASSET_PATH, dir, file);
+        const dir = pathDirname(relativeIndexPath); // 获取文件所在的目录名，例如 'panel'
+        const base = (file) => join(ASSET_PATH, dir, file); // 创建一个辅助函数来拼接完整路径
 
-        const indexHtml = readFileSync(base('index.html'), 'utf8');
-        const styleCode = readFileSync(base('style.css'), 'utf8');
-        const scriptCode = readFileSync(base('script.js'), 'utf8');
+        try {
+            // 读取HTML、CSS和JS文件的内容
+            const indexHtml = readFileSync(base('index.html'), 'utf8');
+            const styleCode = readFileSync(base('style.css'), 'utf8');
+            const scriptCode = readFileSync(base('script.js'), 'utf8');
 
-        const finalScriptCode = await jsMinify(scriptCode);
-        const finalHtml = indexHtml
-            .replaceAll('__STYLE__', `<style>${styleCode}</style>`)
-            .replaceAll('__SCRIPT__', finalScriptCode.code)
-            .replaceAll('__PANEL_VERSION__', version);
+            // 使用Terser压缩页面内联的JavaScript代码
+            const minifiedScript = await jsMinify(scriptCode, {
+                mangle: true, // 混淆变量名
+                compress: true, // 压缩代码
+            });
 
-        const minifiedHtml = htmlMinify(finalHtml, {
-            collapseWhitespace: true,
-            removeAttributeQuotes: true,
-            minifyCSS: true
-        });
+            // 将CSS和压缩后的JS注入到HTML模板中
+            const finalHtml = indexHtml
+                .replace('__STYLE__', `<style>${styleCode}</style>`)
+                .replace('__SCRIPT__', `<script>${minifiedScript.code}</script>`)
+                .replace(/__PANEL_VERSION__/g, version); // 替换所有版本号占位符
 
-        const encodedHtml = Buffer.from(minifiedHtml, 'utf8').toString('base64');
-        result[dir] = JSON.stringify(encodedHtml);
+            // 使用html-minifier压缩最终的HTML内容
+            const minifiedHtml = htmlMinify(finalHtml, {
+                collapseWhitespace: true,       // 折叠空白字符
+                removeAttributeQuotes: true,    // 移除属性的引号
+                minifyCSS: true,                // 压缩内联CSS
+                minifyJS: true,                 // 压缩内联JS
+                removeComments: true,           // 移除注释
+            });
+
+            // 将压缩后的HTML编码为Base64，然后JSON.stringify以便安全地注入到主脚本中
+            const encodedHtml = Buffer.from(minifiedHtml, 'utf8').toString('base64');
+            result[dir] = JSON.stringify(encodedHtml);
+
+        } catch (error) {
+            console.error(`${failure} 处理目录 '${dir}' 中的资源失败:`, error);
+            throw error; // 抛出错误，中断构建过程
+        }
     }
 
-    console.log(`${success} Assets bundled successfuly!`);
+    console.log(`${success} 所有HTML资源已成功捆绑！`);
     return result;
 }
 
-function generateJunkCode() {
-    const minVars = 50, maxVars = 500;
-    const minFuncs = 50, maxFuncs = 500;
-
-    const varCount = Math.floor(Math.random() * (maxVars - minVars + 1)) + minVars;
-    const funcCount = Math.floor(Math.random() * (maxFuncs - minFuncs + 1)) + minFuncs;
-
-    const junkVars = Array.from({ length: varCount }, (_, i) => {
-        const varName = `__junk_${Math.random().toString(36).substring(2, 10)}_${i}`;
-        const value = Math.floor(Math.random() * 100000);
-        return `let ${varName} = ${value};`;
-    }).join('\n');
-
-    const junkFuncs = Array.from({ length: funcCount }, (_, i) => {
-        const funcName = `__junkFunc_${Math.random().toString(36).substring(2, 10)}_${i}`;
-        return `function ${funcName}() { return ${Math.floor(Math.random() * 1000)}; }`;
-    }).join('\n');
-
-    return `// Junk code injection\n${junkVars}\n${junkFuncs}\n`;
-}
-
+/**
+ * 构建Cloudflare Worker的主函数。
+ */
 async function buildWorker() {
-
+    // 步骤1: 处理所有HTML页面
     const htmls = await processHtmlPages();
-    const faviconBuffer = readFileSync('./src/assets/favicon.ico');
+    // 读取favicon图标并转为Base64
+    const faviconBuffer = readFileSync(join(__dirname, '../src/assets/favicon.ico'));
     const faviconBase64 = faviconBuffer.toString('base64');
 
-    const code = await build({
-        entryPoints: [join(__dirname, '../src/worker.js')],
-        bundle: true,
-        format: 'esm',
-        write: false,
-        external: ['cloudflare:sockets'],
-        platform: 'browser',
-        target: 'es2020',
+    // 步骤2: 使用esbuild打包Worker脚本
+    console.log('正在使用esbuild构建Worker...');
+    const bundledCode = await build({
+        entryPoints: [join(__dirname, '../src/worker.js')], // 入口文件
+        bundle: true,          // 捆绑所有依赖
+        format: 'esm',         // 输出为ES模块格式
+        write: false,          // 不将结果写入文件系统，而是返回到内存中
+        external: ['cloudflare:sockets'], // 排除Cloudflare的内置模块
+        platform: 'browser',   // 目标平台为浏览器环境
+        target: 'es2020',      // 目标ECMAScript版本
         define: {
+            // 在此注入所有动态变量
             __PANEL_HTML_CONTENT__: htmls['panel'] ?? '""',
             __LOGIN_HTML_CONTENT__: htmls['login'] ?? '""',
             __ERROR_HTML_CONTENT__: htmls['error'] ?? '""',
@@ -104,74 +109,62 @@ async function buildWorker() {
             __PANEL_VERSION__: JSON.stringify(version)
         }
     });
+    console.log(`${success} Worker构建成功！`);
 
-    console.log(`${success} Worker built successfuly!`);
+    // 步骤3: 使用Terser对最终的Worker代码进行压缩
+    console.log('正在压缩最终的Worker代码...');
+    const minifiedResult = await jsMinify(bundledCode.outputFiles[0].text, {
+        module: true, // 这是一个ES模块
+        output: {
+            comments: false // 移除所有注释
+        },
+        compress: {
+            dead_code: true, // 移除无法访问的代码
+            unused: true,    // 移除未使用的变量和函数
+        },
+        mangle: true, // 混淆变量名以减小体积
+    });
 
-    const minifyCode = async (code) => {
-        const minified = await jsMinify(code, {
-            module: true,
-            output: {
-                comments: false
-            },
-            compress: {
-                dead_code: false,
-                unused: false
-            }
-        });
-
-        console.log(`${success} Worker minified successfuly!`);
-        return minified;
+    if (!minifiedResult.code) {
+        throw new Error('代码压缩失败，未生成任何代码。');
     }
+    console.log(`${success} Worker压缩成功！`);
 
-    let finalCode;
-
-    if (mangleMode) {
-        const junkCode = generateJunkCode();
-        const minifiedCode = await minifyCode(junkCode + code.outputFiles[0].text);
-        finalCode = minifiedCode.code;
-    } else {
-        const minifiedCode = await minifyCode(code.outputFiles[0].text);
-        const obfuscationResult = obfs.obfuscate(minifiedCode.code, {
-            stringArrayThreshold: 1,
-            stringArrayEncoding: [
-                "rc4"
-            ],
-            numbersToExpressions: true,
-            transformObjectKeys: true,
-            renameGlobals: true,
-            deadCodeInjection: true,
-            deadCodeInjectionThreshold: 0.2,
-            target: "browser"
-        });
-
-        console.log(`${success} Worker obfuscated successfuly!`);
-        finalCode = obfuscationResult.getObfuscatedCode();
-    }
-
-    const buildTimestamp = new Date().toISOString();
-    let gitHash = '';
+    // --- 准备最终输出文件 ---
+    const buildTimestamp = new Date().toISOString(); // 获取构建时间
+    let gitHash = 'unknown'; // 初始化git提交哈希
     try {
+        // 尝试获取当前git仓库的短哈希
         gitHash = execSync('git rev-parse --short HEAD').toString().trim();
     } catch (e) {
-        gitHash = 'unknown';
+        console.warn('无法获取git提交哈希，将使用 "unknown" 作为默认值。');
     }
 
+    // 创建一个包含构建信息的注释头
     const buildInfo = `// Build: ${buildTimestamp} | Commit: ${gitHash} | Version: ${version}\n`;
-    const worker = `${buildInfo}// @ts-nocheck\n${finalCode}`;
-    mkdirSync(DIST_PATH, { recursive: true });
-    writeFileSync('./dist/worker.js', worker, 'utf8');
+    const finalWorkerCode = `${buildInfo}// @ts-nocheck\n${minifiedResult.code}`;
 
+    // --- 将文件写入磁盘 ---
+    mkdirSync(DIST_PATH, { recursive: true }); // 确保输出目录存在
+    writeFileSync(join(DIST_PATH, 'worker.js'), finalWorkerCode, 'utf8'); // 写入worker.js
+
+    console.log('正在创建 worker.zip...');
     const zip = new JSZip();
-    zip.file('_worker.js', worker);
-    zip.generateAsync({
-        type: 'nodebuffer',
-        compression: 'DEFLATE'
-    }).then(nodebuffer => writeFileSync('./dist/worker.zip', nodebuffer));
+    zip.file('_worker.js', finalWorkerCode); // 在zip中添加worker脚本
+    const zipBuffer = await zip.generateAsync({
+        type: 'nodebuffer', // 生成Node.js的Buffer
+        compression: 'DEFLATE', // 使用DEFLATE压缩算法
+        compressionOptions: {
+            level: 9 // 设置最高压缩级别
+        }
+    });
+    writeFileSync(join(DIST_PATH, 'worker.zip'), zipBuffer); // 写入worker.zip
 
-    console.log(`${success} Done!`);
+    console.log(`\n${success} 构建完成！输出文件位于 'dist' 目录中。`);
 }
 
+// --- 运行构建流程 ---
 buildWorker().catch(err => {
-    console.error(`${failure} Build failed:`, err);
-    process.exit(1);
+    console.error(`\n${failure} 构建失败:`, err);
+    process.exit(1); // 如果发生错误，则以非零状态码退出进程
 });
